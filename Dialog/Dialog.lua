@@ -22,6 +22,23 @@ local PGF = select(2, ...)
 local L = PGF.L
 local C = PGF.C
 
+function PGF.Dialog_ClearFocus()
+    local dialog = PremadeGroupsFilterDialog
+    dialog.Ilvl.Min:ClearFocus()
+    dialog.Ilvl.Max:ClearFocus()
+    dialog.Defeated.Min:ClearFocus()
+    dialog.Defeated.Max:ClearFocus()
+    dialog.Members.Min:ClearFocus()
+    dialog.Members.Max:ClearFocus()
+    dialog.Tanks.Min:ClearFocus()
+    dialog.Tanks.Max:ClearFocus()
+    dialog.Heals.Min:ClearFocus()
+    dialog.Heals.Max:ClearFocus()
+    dialog.Dps.Min:ClearFocus()
+    dialog.Dps.Max:ClearFocus()
+    dialog.Expression.EditBox:ClearFocus()
+end
+
 function PGF.Dialog_OnModelUpdate()
     PGF.Dialog_StopSearch()
 
@@ -29,6 +46,18 @@ function PGF.Dialog_OnModelUpdate()
     if PGF.Empty(exp) or exp == "true" then exp = "" end
     exp = exp:gsub("^true and ", "")
     PremadeGroupsFilterDialog.Expression.EditBox.Instructions:SetText(exp)
+end
+
+function PGF.Dialog_UsePGF_OnClick(self, button, down)
+    local checked = self:GetChecked()
+    PremadeGroupsFilterState.enabled = checked
+    if checked then
+        PremadeGroupsFilterDialog:Show()
+    else
+        PGF.Dialog_ClearFocus()
+        PremadeGroupsFilterDialog:Hide()
+    end
+    LFGListSearchPanel_DoSearch(LFGListFrame.SearchPanel)
 end
 
 function PGF.Dialog_Act_OnClick(self, button, down)
@@ -152,9 +181,10 @@ end
 
 function PGF.Dialog_Toggle()
     local dialog = PremadeGroupsFilterDialog
-    if PVEFrame:IsVisible()
-            and GroupFinderFrame.selection == LFGListPVEStub
-            and LFGListFrame.activePanel == LFGListFrame.SearchPanel then
+    if PremadeGroupsFilterState.enabled
+            and PVEFrame:IsVisible()
+            and LFGListFrame.activePanel == LFGListFrame.SearchPanel
+            and LFGListFrame.SearchPanel:IsVisible() then
         dialog:Show()
     else
         dialog:Hide()
@@ -190,6 +220,7 @@ end
 
 hooksecurefunc("LFGListFrame_SetActivePanel", PGF.OnLFGListFrameSetActivePanel)
 hooksecurefunc("GroupFinderFrame_ShowGroupFrame", PGF.Dialog_Toggle)
+hooksecurefunc("PVEFrame_ShowFrame", PGF.Dialog_Toggle)
 hooksecurefunc("InputScrollFrame_OnTextChanged", PGF.Dialog_Expression_OnTextChanged)
 PVEFrame:SetScript("OnShow", PGF.Dialog_Toggle)
 PVEFrame:SetScript("OnHide", PGF.Dialog_Toggle)

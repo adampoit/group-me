@@ -22,13 +22,12 @@ local PGF = select(2, ...)
 local L = PGF.L
 local C = PGF.C
 
-PGF.Table_UpdateWithDefaults(PremadeGroupsFilterState, PGF.C.MODEL_DEFAULT)
-
 PGF.lastSearchEntryReset = time()
 PGF.previousSearchExpression = ""
 PGF.currentSearchExpression = ""
 PGF.previousSearchLeaders = {}
 PGF.currentSearchLeaders = {}
+PGF.signedUpGroups = {}
 
 function PGF.GetExpressionFromMinMaxModel(model, key)
     local exp = ""
@@ -100,6 +99,7 @@ function PGF.OnLFGListSortSearchResults(results)
     PGF.ResetSearchEntries()
     local exp = PGF.GetExpressionFromModel()
     PGF.currentSearchExpression = exp
+    if not PremadeGroupsFilterState.enabled then return end
     if exp == "true" then return end -- skip trivial expression
 
     -- loop backwards through the results list so we can remove elements from the table
@@ -111,14 +111,20 @@ function PGF.OnLFGListSortSearchResults(results)
         local completedEncounters = C_LFGList.GetSearchResultEncounterInfo(resultID)
         local memberCounts = C_LFGList.GetSearchResultMemberCounts(resultID)
         local partialLockout, fullLockout = PGF.HasDungeonOrRaidLockout(activity)
+        local avName, avShortName, avCategoryID, avGroupID, avILevel, avFilters,
+              avMinLevel, avMaxPlayers, avDisplayType, avOrderIndex,
+              avUseHonorLevel, avShowQuickJoin = C_LFGList.GetActivityInfo(activity)
+        local difficulty = PGF.GetDifficulty(activity, avName, avShortName)
 
         local env = {}
         env.activity = activity
         env.name = name:lower()
+        env.activityname = avName:lower()
         env.comment = comment:lower()
         env.leader = leaderName and leaderName:lower() or ""
         env.age = math.floor(age / 60) -- age in minutes
         env.voice = voiceChat and voiceChat ~= ""
+        env.voicechat = voiceChat
         env.ilvl = iLvl or 0
         env.hlvl = honorLevel or 0
         env.friends = numBNetFriends + numCharFriends + numGuildMates
@@ -127,32 +133,34 @@ function PGF.OnLFGListSortSearchResults(results)
         env.heals = memberCounts.HEALER
         env.dps = memberCounts.DAMAGER + memberCounts.NOROLE
         env.defeated = completedEncounters and #completedEncounters or 0
-        env.normal     = C.ACTIVITY[activity] and C.ACTIVITY[activity].difficulty == C.NORMAL
-        env.heroic     = C.ACTIVITY[activity] and C.ACTIVITY[activity].difficulty == C.HEROIC
-        env.mythic     = C.ACTIVITY[activity] and C.ACTIVITY[activity].difficulty == C.MYTHIC
-        env.mythicplus = C.ACTIVITY[activity] and C.ACTIVITY[activity].difficulty == C.MYTHICPLUS
+        env.normal     = difficulty == C.NORMAL
+        env.heroic     = difficulty == C.HEROIC
+        env.mythic     = difficulty == C.MYTHIC
+        env.mythicplus = difficulty == C.MYTHICPLUS
         env.myrealm = leaderName and not leaderName:find('-')
         env.partialid = partialLockout
         env.fullid = fullLockout
         env.noid = not fullLockout and not partialLockout
+        env.maxplayers = avMaxPlayers
+        env.suggestedilvl = avILevel
+        env.minlvl = avMinLevel
+        env.categoryid = avCategoryID
+        env.groupid = avGroupID
 
-        env.hunters      = 0
-        env.warlocks     = 0
-        env.priests      = 0
-        env.paladins     = 0
-        env.mages        = 0
-        env.rogues       = 0
-        env.druids       = 0
-        env.shamans      = 0
-        env.warriors     = 0
-        env.deathknights = 0
-        env.monks        = 0
-        env.demonhunters = 0
         for i = 1, numMembers do
             local role, class = C_LFGList.GetSearchResultMemberInfo(resultID, i);
             local classPlural = class:lower() .. "s" -- plural form of the class in english
-            env[classPlural] = env[classPlural] + 1
+            env[classPlural] = (env[classPlural] or 0) + 1
+            if role then
+                local classRolePlural = C.ROLE_PREFIX[role] .. "_" .. class:lower() .. "s"
+                local roleClassPlural = class:lower() .. "_" .. C.ROLE_SUFFIX[role]
+                env[classRolePlural] = (env[classRolePlural] or 0) + 1
+                env[roleClassPlural] = (env[roleClassPlural] or 0) + 1
+            end
         end
+
+        env.arena2v2 = activity == 6
+        env.arena3v3 = activity == 7
 
         -- raids            normal             heroic             mythic
         env.hm   = activity ==  37 or activity ==  38 or activity == 399  -- Highmaul
@@ -175,6 +183,7 @@ function PGF.OnLFGListSortSearchResults(results)
         env.aw   = activity == 434 or activity == 444 or activity == 454 or activity == 467  -- The Arcway
         env.kara =                                       activity == 455                     -- Karazhan
 
+        setmetatable(env, { __index = function(table, key) return 0 end }) -- set non-initialized values to 0
         if PGF.DoesPassThroughFilter(env, exp) then
             -- leaderName is usually still nil at this point if the group is new, but we can live with that
             if leaderName then PGF.currentSearchLeaders[leaderName] = true end
@@ -187,7 +196,6 @@ function PGF.OnLFGListSortSearchResults(results)
     LFGListFrame.SearchPanel.totalResults = #results
 end
 
-local signedUpGroups = {}
 function PGF.OnLFGListSearchEntryUpdate(self)
     local id, activity, _, _, _, _, _, _, _, _, _, isDelisted, leaderName = C_LFGList.GetSearchResultInfo(self.resultID)
     -- try once again to update the leaderName (this information is not immediately available)
@@ -199,9 +207,9 @@ function PGF.OnLFGListSearchEntryUpdate(self)
         and (leaderName and not PGF.previousSearchLeaders[leaderName]) then              -- and leader is new
             local color = C.COLOR_ENTRY_NEW
             self.Name:SetTextColor(color.R, color.G, color.B);
-            if signedUpGroups[id] == nil and PremadeGroupsFilterDialog.searching and C_LFGList.GetRoleCheckInfo() == false then
+            if PGF.signedUpGroups[id] == nil and PremadeGroupsFilterDialog.searching and C_LFGList.GetRoleCheckInfo() == false then
                 print("signed up to ", id)
-                signedUpGroups[id] = true
+                PGF.signedUpGroups[id] = true
                 C_LFGList.ApplyToGroup(id, "", PremadeGroupsFilterState.tankrole.act, PremadeGroupsFilterState.healrole.act, PremadeGroupsFilterState.dpsrole.act) -- SIGN UP AS CHOSEN ROLE
             end
         end
