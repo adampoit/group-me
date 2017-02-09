@@ -1,0 +1,24 @@
+## Interface: 70100
+## Title: Premade Groups Filter
+## Version: 1.4
+## Notes: Allows filtering of premade groups using an UI or advanced filter expressions.
+## Author: Elotheon-Arthas-EU
+## SavedVariables:
+## SavedVariablesPerCharacter: PremadeGroupsFilterState
+## X-Curse-Packaged-Version: 1.4
+## X-Curse-Project-Name: Premade Groups Filter
+## X-Curse-Project-ID: premade-groups-filter
+## X-Curse-Repository-ID: wow/premade-groups-filter/mainline
+
+Init.lua
+Localization\enUS.lua
+Localization\deDE.lua
+Modules\Util.lua
+Modules\Lockout.lua
+Modules\Expression.lua
+Modules\Macro.lua
+Main.lua
+Dialog\Help.lua
+Dialog\Setup.lua
+Dialog\Dialog.lua
+Dialog\Dialog.xml
