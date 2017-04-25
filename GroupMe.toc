@@ -1,0 +1,7 @@
+## Interface: 70200
+## Title: Group Me
+## Version: 0.1
+## Notes: Allows automatic searching and applying to premade groups.
+## Author: Adam Poit
+
+GroupMe.xml
